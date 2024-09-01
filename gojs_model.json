@@ -1,0 +1,76 @@
+[
+    {
+        "key": "1",
+        "name": "Department of Computer Engg. KGPTC Kozhikode"
+    },
+    {
+        "key": "2",
+        "parent": "1",
+        "name": "Data Structure:"
+    },
+    {
+        "key": "3",
+        "parent": "1",
+        "name": "TYPES OF DATA STRUCTURES"
+    },
+    {
+        "key": "4",
+        "parent": "1",
+        "name": "1. Primitive and Non-Primitive Data Structure"
+    },
+    {
+        "key": "5",
+        "parent": "1",
+        "name": "2. Linear and Non-Linear Data Structure"
+    },
+    {
+        "key": "6",
+        "parent": "1",
+        "name": "3. Static and Dynamic Data Structure"
+    },
+    {
+        "key": "7",
+        "parent": "1",
+        "name": "4. Sequential and Direct Data Structure"
+    },
+    {
+        "key": "8",
+        "parent": "1",
+        "name": "OPERATIONS ON DATA STRUCTURE"
+    },
+    {
+        "key": "9",
+        "parent": "1",
+        "name": "COMPLEXITY OF ALGORITHMS"
+    },
+    {
+        "key": "10",
+        "parent": "1",
+        "name": "1. Time Complexity"
+    },
+    {
+        "key": "11",
+        "parent": "1",
+        "name": "2. Space Complexity"
+    },
+    {
+        "key": "12",
+        "parent": "1",
+        "name": "ASYMPTOTIC ANALYSIS"
+    },
+    {
+        "key": "13",
+        "parent": "1",
+        "name": "Department of Computer Engg. KGPTC Kozhikode"
+    },
+    {
+        "key": "14",
+        "parent": "1",
+        "name": "ASYMPTOTIC NOTATION"
+    },
+    {
+        "key": "15",
+        "parent": "1",
+        "name": "STACK"
+    }
+]
