@@ -2,8 +2,6 @@ import os
 
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
-from decorators import timing_decorator
-from dotenv import load_dotenv
 from openai import AzureOpenAI
 from azure.ai.textanalytics import TextAnalyticsClient
 
@@ -27,7 +25,6 @@ def connect_document_intelligence_service() -> DocumentAnalysisClient:
     return document_analysis_client
 
 
-@timing_decorator
 def connect_open_ai_service() -> AzureOpenAI:
     """
     Connect to OpenAi service.
@@ -63,8 +60,6 @@ def connect_open_ai_chatbot() -> AzureOpenAI:
     )
 
 def connect_language_services() -> TextAnalyticsClient:
-     # Load environment variables
-    load_dotenv()
     # Azure Form Recognizer endpoint and key
     endpoint = os.getenv("LANGUAGE_RESOURCE_ENDPOINT")
     key = os.getenv("LANGUAGE_RESOURCE_KEY")

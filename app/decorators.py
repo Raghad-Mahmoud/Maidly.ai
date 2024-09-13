@@ -1,12 +1,12 @@
 import functools
-import re
 import time
 
-from dotenv import load_dotenv
-from flask import Flask, jsonify, request
 
-from config import Config
+from flask import  jsonify, request
 
+from app.config import Config
+import aiohttp
+import asyncio
 
 def validate_uploaded_document(func):
     """
@@ -46,49 +46,6 @@ def timing_decorator(func):
     return wrapper
 
 
-def validate_text_is_not_empty(text_input="text"):
-    """
-    Validate if text is not empty
-    """
-
-    def wrapper(func):
-        @functools.wraps(func)
-        def validate(*args, **kwrgs):
-            text = request.get_json().get(text_input)
-
-            text = text.strip()
-
-            if text == "":
-                return {"message": f"{text_input} text is invalid."}, 422
-
-            return func(*args, **kwrgs)
-
-        return validate
-
-    return wrapper
-
-
-def validate_text_regenerating_input(func):
-    """
-    Validate text that needs to be regenerated if it valid or not
-    """
-
-    def validate_regenerating_input(*args, **kwrgs):
-        text = str(request.get_json().get("text"))
-
-        text = text.strip()
-        text = re.sub(r"\s+", " ", text)
-
-        if text == "":
-            return {"message": "Provided text is empty."}, 422
-        if len(text.split()) < 20:
-            return {"message": "Provided text is so smalle."}, 422
-
-        return func(*args, **kwrgs)
-
-    return validate_regenerating_input
-
-
 def handle_exceptions(func):
     @functools.wraps(func)
     def wrapper(*args, **kwrgs):
@@ -102,3 +59,48 @@ def handle_exceptions(func):
             return jsonify({"message": "Service Exception."}), 500
 
     return wrapper
+
+
+
+
+async def fetch_summarization(session, paragraph):
+    start_time = time.time()
+    async with session.post("http://127.0.0.1:5000/summarized_text", json={"paragraph": paragraph}) as response:
+        if response.status == 200:
+            data = await response.json()
+            end_time = time.time()
+            print(f"Summarization fetched in {end_time - start_time:.2f} seconds")
+            return data['summarization']
+        else:
+            raise ValueError("Failed to generate summarization")
+
+async def fetch_image(session, subtitle):
+    start_time = time.time()
+    async with session.post("http://127.0.0.1:5000/generate-summarization-image", json={"summary": subtitle}) as response:
+        if response.status == 201:
+            data = await response.json()
+            end_time = time.time()
+            print(f"Image fetched in {end_time - start_time:.2f} seconds")
+            return data['url']
+        else:
+            raise ValueError("Failed to generate image")
+
+async def generate_summarization(paragraph):
+    async with aiohttp.ClientSession() as session:
+        return await fetch_summarization(session, paragraph)
+
+async def generate_image(subtitle):
+    async with aiohttp.ClientSession() as session:
+        return fetch_image(session, subtitle)
+
+async def generate_summarizations_and_images(paragraphs, subtitles , main_title ):
+    summarizations = await asyncio.gather(*(generate_summarization(p) for p in paragraphs))
+    
+    if len(summarizations) != len(subtitles):
+        raise ValueError("The number of subtitles must match the number of paragraphs.")
+    async with aiohttp.ClientSession() as session:
+        subtitles.append(main_title)
+        tasks = [asyncio.ensure_future(fetch_image(session , s)) for s in subtitles]
+        images = await asyncio.gather(*tasks)      
+    return summarizations, images
+

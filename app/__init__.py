@@ -1,89 +1,70 @@
-from flask import Flask, render_template, redirect, url_for, request, jsonify
-from flask_jwt_extended.exceptions import NoAuthorizationError
-from datetime import timedelta
-from flask_jwt_extended import (
-    JWTManager, create_access_token, set_access_cookies, unset_jwt_cookies, jwt_required, get_jwt_identity, verify_jwt_in_request
-)
-from connectors import connect_document_intelligence_service, connect_open_ai_service
-from decorators import validate_uploaded_document, handle_exceptions
+from flask import Flask, request, jsonify , render_template
 from werkzeug.security import generate_password_hash,check_password_hash
-import random
 import re
-import json
-import os
-import random
-from config import Config
-import logging
 
 
+from .blueprints.summarization_routes import summarization_bp
+from .blueprints.mind_map import mind_map_bp
+from .blueprints.home_page import home_page_bp
+from .blueprints.authentication import authentication_bp
+from app.blueprints.export_pdf_file import export_pdf_file_bp
 
-from connectors import (
-    connect_document_intelligence_service,
-    connect_open_ai_chatbot,
-    connect_open_ai_service,
-    connect_language_services,
-)
-from decorators import (
-    timing_decorator,
-    validate_text_is_not_empty,
-    validate_text_regenerating_input,
-    validate_uploaded_document,
-)
-from dataBaseConnection import database 
+from .blueprints.authentication import authentication_bp ,jwt
+from .dataBaseConnection import database 
+
 from dotenv import load_dotenv
-from openai import AzureOpenAI
 from typing import Dict
+from .injectors import inject_config_variables_into_templates
+from datetime import timedelta
+import os
+# load environment variables
+load_dotenv()
 
 
+# Initialize new flask app
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
 # Configure your app's secret key and JWT settings
-app.config['SECRET_KEY'] = 'WvWaVu42rrAFkB8ye2H5QViNWa8pW0kN6rM97YwYfv1OnAH5Q6R9zFWFdHrjjpJ'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['JWT_TOKEN_LOCATION'] = ['cookies']
 app.config['JWT_COOKIE_CSRF_PROTECT'] = False
 app.config['JWT_ACCESS_COOKIE_PATH'] = '/'
 app.config['JWT_COOKIE_SECURE'] = False  # Set to True for production with HTTPS
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=5)
-
-# Initialize JWT Manager
-jwt = JWTManager(app)
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] =timedelta(days=1)
+app.config['JWT_ALGORITHM'] = "HS256"
+app.config['JWT_COOKIE_HTTPONLY'] = True  # Prevent client-side access to the cookie
 
 
-@app.context_processor
-def inject_global_variables_into_templates() -> Dict:
-    """
-    Inject global variables into all templates.
-    """
-    return {"config": Config}
+# Initialize the JWT manager with the Flask application
+jwt.init_app(app)
+
+# Register blueprints
+app.register_blueprint(summarization_bp)
+app.register_blueprint(mind_map_bp)
+app.register_blueprint(home_page_bp)
+app.register_blueprint(authentication_bp)
+app.register_blueprint(export_pdf_file_bp)  
 
 
-load_dotenv()
+# Wrap our project with inject_config_variables_into_templates 
+# to inject global templates variables
+app.context_processor(inject_config_variables_into_templates)
 
 
-jwt = JWTManager(app)
-
-# Access the 'users' collection from the database
-users_collection = database['users']
-# In-memory user storage
-users = {
-    "user1@example.com": generate_password_hash("P@ssw0rd!2024"),  # Example hashed password
-    "user2@example.com": generate_password_hash("AnotherP@ssw0rd!2024")  # Example hashed password
-}
 
 def validate_signup_data(username, email, password):
     # Check if all fields are not empty
     if not username or not email or not password:
         return "All fields are required."
+
     # Username allows letters, numbers, underscores, and spaces, between 3-50 characters
     if not re.match(r"^[a-zA-Z0-9_ ]{3,50}$", username):
         return "Username must be 3-50 characters long and can include letters, numbers, underscores, and spaces."
+
     # Validate email format
     if not re.match(r"^[a-zA-Z0-9_.-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$", email):
         return "Invalid email format."
+
     # Password must be at least 8 characters long and contain at least one digit, one uppercase letter, one lowercase letter, and one special character
     if len(password) < 8:
         return "Password must be at least 8 characters long."
@@ -95,254 +76,138 @@ def validate_signup_data(username, email, password):
         return "Password must contain at least one lowercase letter."
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
         return "Password must contain at least one special character."
+
     return None
 
-@app.route('/signup', methods=['GET', 'POST'])
+
+@app.route('/signup', methods=['POST'])
 def signup():
-    if request.method == 'GET':
-        logger.info("User accessed the sign-up page.")
-        return render_template('registration.html')
+    # get user data
+    data = request.get_json()
 
-    if request.method == 'POST':
-        username = request.form.get('name')
-        email = request.form.get('email')
-        password = request.form.get('password')
+    # save user data into variable
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
 
-        logger.info(f"Sign-up attempt with username: {username}, email: {email}")
+    # validate user data
+    error = validate_signup_data(username, email, password)
+    if error:
+        return jsonify({'message': error}), 422  
 
-        error = validate_signup_data(username, email, password)
-        if error:
-            logger.info(f"Validation error: {error}")
-            return jsonify({'message': error}), 422
+    # check if user already exists
+    user_collection = database.get_collection('users')
 
-        # Check if the email already exists in the MongoDB collection
-        existing_user = users_collection.find_one({'email': email})
-        if existing_user:
-            logger.info(f"Email already exists: {email}")
-            return jsonify({'message': 'Email already exists'}), 422
+    # check if username or email already exists
+    if user_collection.find_one({'username': username}):
+        return jsonify({'message': 'Username already exists'}), 422  
 
-        # Hash the password and insert the new user into the MongoDB collection
-        hashed_password = generate_password_hash(password)
-        new_user = {
-            'username': username,
-            'email': email,
-            'password': hashed_password
-        }
-        users_collection.insert_one(new_user)
+    # check if email already exists
+    if user_collection.find_one({'email': {'$exists': True, '$eq': email}}):
+        return jsonify({'message': 'Email already exists'}), 422  
 
-        logger.info(f"User {email} created successfully.")
-        return jsonify({'message': 'User created successfully'}), 201
+    # hash password
+    hashed_password = generate_password_hash(password)
 
-@app.route('/signin', methods=['GET', 'POST'])
+    user_data = {
+        'username': username,
+        'email': email,
+        'password_hash': hashed_password
+    }
+
+    # insert user data
+    user_collection.insert_one(user_data)
+    return jsonify({'message': 'User created successfully'}), 201
+
+
+@app.route('/signin', methods=['POST'])
 def signin():
-    if request.method == 'GET':
-        logger.info("User accessed the Sign-in page.")
-        return render_template('registration.html')
-
-    if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-
-        # Log received data for debugging
-        logger.info(f"Received email: {email}")
-        logger.info(f"Received password: {password}")
-
-        # Fetch the user document from the MongoDB collection
-        user = users_collection.find_one({'email': email})
-
-        if not user:
-            logger.warning(f"No user found with email: {email}")
-            return jsonify({'login': False, 'message': 'No user found with the provided email.'}), 401
-
-        # Check if the provided password matches the hashed password stored in the database
-        if not check_password_hash(user['password'], password):
-            logger.warning(f"Password mismatch for email: {email}")
-            return jsonify({'login': False, 'message': 'Invalid credentials.'}), 401
-
-        # Generate an access token
-        expires = timedelta(minutes=5)
-        access_token = create_access_token(identity=email, expires_delta=expires)
-        logger.info(f"Generated token: {access_token}")
-
-        # Create the response and set the access token in the cookies
-        response = jsonify({'login': True, 'message': 'Signed in successfully.'})
-        set_access_cookies(response, access_token)
-
-        logger.info(f"User {email} signed in successfully.")
-        return response
+    data = request.get_json()
     
-@app.route('/logout', methods=['POST'])
-def logout():
-    response = jsonify({'logout': True, 'message': 'Logged out successfully.'})
-    unset_jwt_cookies(response)
-    logger.info("User logged out and session ended.")
-    return redirect(url_for('signin'))
+    username = data.get('username')
+    password = data.get('password') 
     
-@app.route('/')
-def home():
-    return render_template('homePage.html', commint="example")
-
-
-@app.route('/generate-mind-map', methods=['POST'])
-@validate_uploaded_document
-def generat_new_mind_map():
-    document = request.files.get("document")
-    document_analysis_client = connect_document_intelligence_service()
-    poller = document_analysis_client.begin_analyze_document(
-        "prebuilt-document", document=document
-    )
-    result = poller.result()
-
-    # Convert paragraphs to a list of dictionaries
-    paragraphs = [p.to_dict() for p in result.paragraphs]
-
-    # Create a dictionary to map section headings to their paragraphs
-    paragraphs_dict = {}
-    current_section_heading = None
-
-    for paragraph in result.paragraphs:
-        if paragraph.role == "title":
-            # There should only be one title
-            main_title = paragraph.content
-        elif paragraph.role == "sectionHeading":
-            # Save paragraphs for the previous section heading if it exists
-            if (
-                current_section_heading
-                and current_section_heading not in paragraphs_dict
-            ):
-                paragraphs_dict[current_section_heading] = []
-            # Update the current section heading
-            current_section_heading = paragraph.content
-            if current_section_heading not in paragraphs_dict:
-                paragraphs_dict[current_section_heading] = []
-        elif paragraph.role is None and current_section_heading:
-            # Append paragraphs to the current section heading
-            paragraphs_dict[current_section_heading].append(paragraph.content)
-    output = {
-        "mainTitle": main_title if "main_title" in locals() else "",
-        "subtitles": [
-            {
-                "subtitle": section_heading,
-                "paragraphs": paragraphs_dict.get(section_heading, []),
-            }
-            for section_heading in paragraphs_dict
-        ],
-    }
+    # validate user data
+    if not username or not password:
+        return jsonify({'message': 'username and password are required'}), 422  
     
-    return render_template('mindMap.html', output=output)
-
-@app.route("/generate-summarization-image", methods=["POST"])
-@handle_exceptions
-@validate_text_is_not_empty("summary")
-def generate_summarization_image() -> Dict[str, str]:
-    """
-    Generates an Image that describes summarized text using DallE-3 model.
-
-    Returns:
-    - A JSON object containing:
-      - "message": A success message.
-      - "url": The URL of the generated image.
-    """
-    summary = request.get_json().get('summary')
-
-    client = connect_open_ai_service()
-
-    result = client.images.generate(model="dall-e-3", prompt=summary, n=1)
-
-    url = json.loads(result.model_dump_json())["data"][0]["url"]
-
-    return {
-        "message": "Image generated successfully.",
-        "url": url,
-    }, 201
+    # Get user data
+    user_collection = database.get_collection('users')
+    
+    # Check if user exists
+    user = user_collection.find_one({'username': username})
+    
+    if not user:
+        return jsonify({'message': 'Invalid input '}), 401
+    
+    if not check_password_hash(user['password_hash'], password):
+        return jsonify({'message': 'Invalid input'}), 401
+    
+    return jsonify({'message': 'Sign in successful'}), 200
 
 
-@app.route('/mindMap')
-def func():
-    output = [
-        {"key": "1", "name": "Department of Computer Engg. KGPTC Kozhikode"},
-        {"key": "2", "parent": "1", "name": "Data Structure:"},
-        {"key": "3", "parent": "1", "name": "TYPES OF DATA STRUCTURES"},
-        {"key": "4", "parent": "1", "name": "1. Primitive and Non-Primitive Data Structure"},
-        {"key": "5", "parent": "1", "name": "2. Linear and Non-Linear Data Structure"},
-        {"key": "6", "parent": "1", "name": "3. Static and Dynamic Data Structure"},
-        {"key": "7", "parent": "1", "name": "4. Sequential and Direct Data Structure"},
-        {"key": "8", "parent": "1", "name": "OPERATIONS ON DATA STRUCTURE"},
-        {"key": "9", "parent": "1", "name": "COMPLEXITY OF ALGORITHMS"},
-        {"key": "10", "parent": "1", "name": "1. Time Complexity"},
-        {"key": "11", "parent": "1", "name": "2. Space Complexity"},
-        {"key": "12", "parent": "1", "name": "ASYMPTOTIC ANALYSIS"},
-        {"key": "13", "parent": "1", "name": "Department of Computer Engg. KGPTC Kozhikode"},
-        {"key": "14", "parent": "1", "name": "ASYMPTOTIC NOTATION"},
-        {"key": "15", "parent": "1", "name": "STACK"}
-    ]
-    return render_template("mindMap.html", static=output)
+# 4xx error handling 
+@app.errorhandler(404)
+@app.errorhandler(405)
+def code_4xx_handling(e):
+    # error_code = e.code if hasattr(e, "code") else 500
+    # return render_template("errorPages/4xxError.html", error_type=error_code), error_code
 
-
-@app.route("/regenerate-summarization-content")
-@handle_exceptions
-@validate_text_regenerating_input
-def regenerate_summarization_content():
-    """
-    Regenerate and summarize summarized content using OpenAI
-
-    This function uses OpenAI chatbot to regenerate and summarize summarized text
-    by building new prompt, the inject the prompt into chatbot.
-    """
-    text = request.get_json().get("text")
-
-    client = connect_open_ai_chatbot()
-
-    prompt = (
-        f"You are a genius chat bot, regenerate and summarize this text for me \n{text}"
-    )
-
-    response = client.completions.create(
-        model=os.getenv("OPEN_AI_CHAT_DEBLOYMENT_NAME"),
-        prompt=prompt,
-        temperature=1,
-        max_tokens=None,
-        top_p=0.5,
-        frequency_penalty=0,
-        presence_penalty=0,
-        best_of=1,
-        stop=None,
-    )
-
-    return {
-        "message": "Text summarized successfully.",
-        "text": response.choices[0].text,
+    error_messages = {
+            404: "The page you are looking for does not exist.How you got here is a mystery.But you can click the button below to go back to the homepage.",
+            405: "Method Not Allowed.The method is not allowed for the requested URL.",
     }
 
-@app.route("/summarized_text", methods=["POST"])
-def summarized_text():
-    paragraph = request.json.get("paragraph")   
-    if not paragraph:
-        return jsonify({'error': 'Invalid data'}), 400
-    if len(paragraph.split()) < 35 or paragraph==None:
-        return (
-            jsonify({"error": "Invalid input: paragraph must be more that 35 words"}),
-            422,
-        )  
-    text_analytics_client = connect_language_services()
-    summarized_texts = []
-    poller = text_analytics_client.begin_abstract_summary([paragraph])
-    abstract_summary_results = poller.result()
-    for result in abstract_summary_results:
-        if result.kind == "AbstractiveSummarization":
-            [summarized_texts.append(summary.text) for summary in result.summaries]
-        elif result.is_error is True:
-            print(
-                "...Is an error with code '{}' and message '{}'".format(
-                    result.error.code, result.error.message
-                )
-            )
-    return jsonify({'summarization': summarized_texts[0]}), 200
-# for viewing and testing 
-@app.route("/error_page")
-def error_page():
-    return render_template('errorPage.html')
+    # Get the status code from the error object
+    error_code = e.code if hasattr(e, "code") else 500
 
+    # Retrieve the error message based on the error code
+    error_message = error_messages.get(
+        error_code, "An unexpected error occurred. Please try again later."
+    )
+
+    return (
+        render_template(
+            "errorPages/404Error.html",
+            error_type=str(error_code),
+            error_message=error_message,
+        ),
+        error_code,
+    )
+
+# 5xx errors handling 
+@app.errorhandler(500)
+@app.errorhandler(502)
+@app.errorhandler(503)
+@app.errorhandler(504)
+@app.errorhandler(505)
+def code_5xx_handling(e):
+    error_messages = {
+        500: "Oops! Something went wrong on our end. We’re working to fix it. Please try again later.",
+        502: "It looks like there’s an issue with our service. We’re investigating the problem and will have it fixed soon. Please try again in a few minutes.",
+        503: "Our server is currently down for maintenance or experiencing high traffic. We’ll be back up soon. Please try again later.",
+        504: "The server took too long to respond. We’re working on resolving the issue. Please try your request again in a few minutes.",
+        505: "We’re unable to process your request due to an unsupported HTTP version. Please check your request and try again.",
+    }
+
+    # Get the status code from the error object
+    error_code = e.code if hasattr(e, "code") else 500
+
+    # Retrieve the error message based on the error code
+    error_message = error_messages.get(
+        error_code, "An unexpected error occurred. Please try again later."
+    )
+
+    return (
+        render_template(
+            "errorPages/5xxError.html",
+            error_type=str(error_code),
+            error_message=error_message,
+        ),
+        error_code,
+    )
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+

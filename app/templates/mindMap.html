@@ -35,20 +35,24 @@
     const appUrl = '{{ config.APP_URL }}';
   </script>
   <script src="../static/js/mind-map-views.js"></script>
+  <script src="../static/js/logout.js"></script>
+  <script src="../static/js/flash-message.js"></script>
+
 
 
 </head>
 
-<body class="index-page">
+<body class="index-page" id="mind-map-page">
   <!-- mind map page navbar -->
-  <nav class="navbar navbar-expand-lg py-3 ">
-    <div class="pe-lg-0 ps-lg-5 container-fluid justify-content-between">
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
-        aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+  <nav class="navbar navbar-expand-lg py-3">
+    <div class="container-fluid justify-content-between">
+      <button class="navbar-toggler collapsed" type="button" data-bs-toggle="collapse"
+        data-bs-target="#navbar-toggler-demo01" aria-controls="navbar-toggler-demo01" aria-expanded="false"
+        aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
-      <div class="collapse navbar-collapse justify-content-between " id="navbar-supported-content">
-        <div class="nav_left  d-lg-flex align-items-center">
+      <div class="navbar-collapse collapse justify-content-between" id="navbar-toggler-demo01">
+        <div class="nav_left d-lg-flex align-items-center">
           <nav class="main-nav">
             <div class="nav d-block d-lg-flex nav-tabs" id="nav-tab" role="tablist">
               <div class="left">
@@ -57,28 +61,45 @@
                 </a>
               </div>
               <a href="/"><i title="Home" class="bi bi-house-fill nav-link" id="home-icon"></i></a>
-              <a href="/"><i title="Profile" class="bi bi-person-circle nav-link" id="profile-icon"></i></a>
+              <i title="Logout" class="bi bi-box-arrow-right nav-link" id="logout-icon"></i>
             </div>
           </nav>
         </div>
-      </div>
 
-      <div class="collapse navbar-collapse justify-content-end " id="navbar-supported-content">
         <div class="nav_right d-lg-flex align-items-center">
           <nav class="sub-nav">
             <div class="nav d-block d-lg-flex nav-tabs" id="nav-tab" role="tablist">
               <label for="upload-file-btn">
                 <i title="Upload PDF" class="bi bi-file-pdf-fill nav-link" id="upload-icon"></i>
-                <p class="file-name" id="file-name"></p>
+                <p class="file-name" id="file-name">
+                  {% if file_name %}
+                  {{file_name}}
+                  {% else %}
+                  Upload file
+                  {% endif %}
+                </p>
               </label>
-              <form action="http://127.0.0.1:5000/generate-mind-map" method="POST" enctype="multipart/form-data">
+              <form action="http://127.0.0.1:5000/generate-mind-map" method="POST" enctype="multipart/form-data"
+                id="file-upload-form">
                 <input class="nav-link" type="file" name="document" id="upload-file-btn" onchange="displayFileName()">
-                <button title="Submit to generate" type="submit" class="nav-link">
-                  <i class="bi bi-file-check-fill" id="submit-icon"></i>
+                <button title="Submit to generate" type="submit" class="nav-link" id="submit-btn">
+                  <i class="bi bi-file-check-fill" id="submit-icon"></i>Submit file
                 </button>
               </form>
-              <i title="Export as image" class="bi bi-upload nav-link" id="export-as-image-button"></i>
-              <i title="Share" class="bi bi-share-fill nav-link" id="share-icon"></i>
+              <!-- views dropdown -->
+              <div class="nav-item dropdown">
+                <button class="nav-link dropdown-toggle" id="paint-brush-dropdown" role="button">
+                  <i class="fa-solid fa-paintbrush" id="views-dropdown-btn"></i>
+                </button>
+                <div class="dropdown-menu" aria-labelledby="paint-brush-dropdown">
+                  <button id="first-view" class="dropdown-item">Default View</button>
+                  <button id="second-view" class="dropdown-item">Mind Map View</button>
+                  <button id="third-view" class="dropdown-item">Class Hierarchy View</button>
+                </div>
+              </div>
+              <i title="Export as image" class="bi bi-card-image nav-link" id="export-as-image-button"></i>
+              <i class="bi bi-upload nav-link" id="icon-download-pdf" title="Dowload mind map as PDF"></i>              <div id="spinner" class="spinner" style="display: none;"></div>
+              <script src="../static/js/dowload-pdf.js"></script>
             </div>
           </nav>
         </div>
@@ -86,17 +107,12 @@
     </div>
   </nav>
   <main class="main">
-    <!-- button section -->
-    <!-- /button section -->
+
     <!-- Mind Map -->
-    <div>
-      <button id="firstView">Default View</button>
-      <button id="secondView">Mind Map View</button>
-      <button id="thirdView">Class Hierarchy View</button>
-    </div>
-
     <div id="mind"></div>
-
+    <div>
+      <ul class="notifications" id="flash-messages-container"></ul>
+    </div>
     <!-- import the GO JS inorder to display our Mind Map -->
     <script src="https://unpkg.com/gojs/release/go-debug.js"></script>
 
@@ -113,29 +129,47 @@
         <div class="popup-text">
           <h2 class="popup-title" id="popup__title">Welcome to Our Service</h2>
           <div id="modal-content">
-            <p id="popupExplanation" class="popup-explanation">
-
-            </p>
+            <p id="popup-explanation" class="popup-explanation">
+            <div id="summarization-loading-spinner" class="spinner-border align-self-center" role="status"></div>
+            <span class="sr-only"></span>
           </div>
-          <div class="popup-buttons">
-            <div class="modal-footer">
-              <button id="btn-regenerate" class="btn btn-regenerate"
-                onclick="regenerateSummarizationContent(`{{ config.APP_URL }}`)">Regenerate</button>
-            </div>
+          </p>
+        </div>
+        <div class="popup-buttons">
+          <div class="modal-footer">
+            <button id="btn-regenerate" class="btn btn-regenerate"
+              onclick="regenerateSummarizationContent(`{{ config.APP_URL }}`)">Regenerate</button>
           </div>
         </div>
       </div>
     </div>
-
-    <div>
-      <ul class="notifications" id="flash-messages-container"></ul>
     </div>
-
     <script src="https://unpkg.com/gojs/release/go-debug.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Vendor JS Files -->
+    <script src="static/vendor/php-email-form/validate.js"></script>
+    <script src="static/vendor/aos/aos.js"></script>
+    <script src="static/vendor/swiper/swiper-bundle.min.js"></script>
+    <script src="static/vendor/purecounter/purecounter_vanilla.js"></script>
+    <script src="static/vendor/glightbox/js/glightbox.min.js"></script>
+    <script src="static/vendor/imagesloaded/imagesloaded.pkgd.min.js"></script>
+    <script src="static/vendor/isotope-layout/isotope.pkgd.min.js"></script>
+    <!-- Main JS File -->
+    <script src="static/js/flash-message.js"></script>
+    <script src="static/js/generating-summarization-image-handler.js"></script>
+    <script src="../static/js/validate-submit-input.js"></script>
+    <script>
+      {% if errorMessage %}
+      createFlashMessage(flashMessagesTypes.error, "{{errorMessage}}");
+      {% endif %}
+    </script>
     <script>
       let summarizationImageLoadingSpinner = document.getElementById('summarization-image-loading-spinner');
       let summarizationImageContainer = document.getElementById('summarization-image-container');
+
+      let summarizationLoadingSpinner = document.getElementById('summarization-loading-spinner');
+      let summarizationTextPTag = document.getElementById('popup-explanation');
+
       const popupModal = document.getElementById('popup');
       const closeModalIcon = document.getElementById('closeModalIcon');
       popupModal.classList.remove('active');
@@ -147,13 +181,18 @@
 
       function generate_subtopic_window(subtopic, obj) {
         const nodeData = obj.part.data;
-
+        let mainTitle = output["mainTitle"]
         document.getElementById('popup__title').innerText = nodeData.name;
 
         popupModal.classList.add('active');
+
         summarizationImageLoadingSpinner.classList.remove('d-none');
+        summarizationLoadingSpinner.classList.remove('d-none');
         summarizationImageContainer.classList.add('d-none');
-        handleGenerateSummarizationImage(subtopic, '{{ config.APP_URL }}');
+        summarizationTextPTag.classList.add('d-none');
+        
+        handling_summ_req(nodeData.paragraph, appUrl);
+        handleGenerateSummarizationImage(subtopic, '{{ config.APP_URL }}', mainTitle);
       }
 
 
@@ -166,12 +205,7 @@
       {% if output %}
       const output = {{ output | tojson }};
       applyFirstView();
-      {% else %}
-      // If there is no output, apply the static model
-      const staticModel = {{ static | tojson }};
-      initializeFirstView(staticModel);
       {% endif %}
-
     </script>
     <script>
       // Initialize the export functionality
@@ -182,38 +216,25 @@
       //var introduction_popup = new bootstrap.Modal(document.getElementById('introduction_popup'));
       //introduction_popup.show();
     </script>
-
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('submit-icon').addEventListener('click', async function() {
-          try {
-              const response = await fetch('/generate-mind-map', {
-                  method: 'POST',
-                  credentials: 'include'  // Ensure cookies are sent with the request
-              });
-  
-              if (response.status === 401) {
-                  // Redirect to login page if unauthorized
-                  window.location.href = '/signin';
-              } else if (response.redirected) {
-                  // Handle any other redirection
-                  window.location.href = response.url;
-              } 
-          } catch (error) {
-              console.error('Error:', error);
-          }
-      });
-  });
-      </script>
     <!-- /Mind Map -->
   </main>
   <!-- Scroll Top -->
   <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i
       class="bi bi-arrow-up-short"></i></a>
   <!-- Preloader -->
-  <!-- <div id="preloader"></div> -->
+  <div id="preloader"></div>
+
+  <script>
+    const preloader = document.querySelector('#preloader');
+    if (preloader) {
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          preloader.remove();
+        }, 2000);
+      });
+    }
+  </script>
   <!-- Vendor JS Files -->
-  <script src="static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="static/vendor/php-email-form/validate.js"></script>
   <script src="static/vendor/aos/aos.js"></script>
   <script src="static/vendor/swiper/swiper-bundle.min.js"></script>
@@ -222,8 +243,6 @@
   <script src="static/vendor/imagesloaded/imagesloaded.pkgd.min.js"></script>
   <script src="static/vendor/isotope-layout/isotope.pkgd.min.js"></script>
   <!-- Main JS File -->
-  <script src="static/js/main.js"></script>
-  <script src="static/js/flash-message.js"></script>
   <script src="static/js/generating-summarization-image-handler.js"></script>
 </body>
 

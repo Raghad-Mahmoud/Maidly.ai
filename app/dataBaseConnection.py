@@ -1,17 +1,12 @@
 from pymongo import MongoClient, errors
-import sys
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
-
-# use the below line to append parent directory to sys.path for importing config.py
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from instance.config import Config
 
 # Initialize MongoDB connection
 def get_mongo_client():
-    client = MongoClient(Config.MONGO_URI)
+    client = MongoClient(os.getenv('MONGO_URI'))
     return client
 
 # Check MongoDB connection
@@ -23,8 +18,7 @@ def check_mongo_connection(client):
         print("MongoDB connection: Failed")
 
 # Get the database
-
-def get_database(client, db_name=os.getenv('test')):
+def get_database(client, db_name=os.getenv('DB_NAME')):
     return client.get_database(db_name)
 
 # Initialize the database and check the connection

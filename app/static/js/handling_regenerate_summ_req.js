@@ -14,6 +14,11 @@ function regenerateSummarizationContent(url) {
             if (!response.ok) {
                 throw new Error('Network response was not ok ' + response.statusText);
             }
+
+            if(response.status == 422) {
+                throw new Error("Text is so small and can't regenerate it " + response.statusText);
+            }
+
             // Parse the JSON from the response
             return response.json();
         })

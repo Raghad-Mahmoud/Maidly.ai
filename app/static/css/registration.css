@@ -202,7 +202,7 @@ div.overlay-panel#overlay-right {
     transform: translateX(20%);
 }
 
-.registration-form{
+#sign-in-form, #sign-up-form {
 	background-color: #FFFFFF;
 	display: flex;
 	align-items: center;
@@ -215,3 +215,14 @@ div.overlay-panel#overlay-right {
 #registration-title{
 	color: #3b3656;
 }
+
+
+/*--------------------------------------------------------------
+# Form Validation
+--------------------------------------------------------------*/
+.form-validation-error-message {
+    color: red ;
+    font-size: 0.6em;
+    display: block;
+    margin-top: 5px;
+  }

@@ -8,8 +8,66 @@ TODO: Guide users through getting your code up and running on their own system. 
 3.	Latest releases
 4.	API references
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+# Flask Project Installation Guide
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed on your system:
+
+- Python 3.7+
+- pip (Python package manager)
+
+## Installation Steps
+
+### 1. Clone the Repository
+
+First, clone the project repository from GitHub:
+
+```bash
+git clone https://MSPL-AI2024s@dev.azure.com/MSPL-AI2024s/Project%20D/_git/Project%20D
+```
+### 2. Install Dependecies
+
+Run the following command to install dependecies:
+
+```bash
+pip install -r requirements.txt
+```
+### 3. Copy `.env.example` to `.env`
+
+You can copy it manually or run the following command to copy `.env.example` to `.env`:
+
+```bash
+copy .env.example .env 
+```
+### 4. Fill in .env variables
+### 4. Run the project
+
+Run project by running ./run.py or run the following command:
+```bash
+py run.py
+```
+
+# Code Architecture
+  ```plaintext
+  ├── app/
+  │   ├── blueprints/   # each one represents related functionalities
+  │   ├── static/       # project static files
+  │   ├── templates/    # flask templtes
+  │   ├── __init__.py      # initialize `flask` app, wrap falsk app and register blueprints
+  │   ├── config.py        # initialize config variables
+  │   ├── connectors.py    # contains functions that handles connecting to AI services process
+  │   ├── dataBaseConnection.py    # contains connection to mongodb process
+  │   ├── decorators.py    # contains usefull decorators
+  │   ├── forms.py         # 
+  │   ├── helpers.py       # define helper functions 
+  │   ├── injectors.py     # define injecting function to global flask templates 
+  │   ├── models.py        # 
+  │   ├── validators.py    # contains validation function and decorators 
+  ├── examples/  # directory that contains some testing pdf files
+  ├── run.py     # run this file to start running project
+  └── README.md  # Project documentation
+```
 
 # Contribute
 TODO: Explain how other users and developers can contribute to make your code better. 
